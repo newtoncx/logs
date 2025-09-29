@@ -16,11 +16,6 @@ def parse_event(e):
     return {"text": text, "people": people}
 
 
-def parse_day(line):  # "weds jan 1 a, b (x), c"
-    wd, mon, day, rest = re.match(r'(\w+)\s+(\w+)\s+(\d+)\s+(.*)', line).groups()
-    return mon, int(day), [parse_event(e.strip()) for e in rest.split(",")]
-
-
 def _is_skip(line):
     s = line.strip()
     return (not s) or s in ("(→)", "→") or set(s) <= {"_"}
@@ -55,16 +50,8 @@ def parse_file(path):
         i += 1
         if rest:
             events = [parse_event(e.strip()) for e in rest.split(",") if e.strip()]
-            days.append((mon, day, events))
-            continue
-        events = []
-        while i < len(lines) and not DAY_RE.match(lines[i]):
-            item = lines[i]
-            if item.startswith("-"):
-                item = item[1:].strip()
-            if item:
-                events.append(parse_event(item))
-            i += 1
+        else:
+            events = []
         days.append((mon, day, events))
     return days
 
@@ -81,7 +68,7 @@ def format_days(days):
 
 
 def main():
-    path = sys.argv[1] if len(sys.argv) > 1 else "2025.txt"
+    path = sys.argv[1]
     text = format_days(parse_file(path))
     sys.stdout.write(text if text.endswith("\n") else text + "\n")
 
