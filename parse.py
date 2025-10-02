@@ -52,13 +52,13 @@ def parse_file(path):
             events = [parse_event(e.strip()) for e in rest.split(",") if e.strip()]
         else:
             events = []
-        days.append((mon, day, events))
+        days.append((mon, day, events, lines[i]))
     return days
 
 
 def format_days(days):
     chunks = []
-    for mon, day, events in days:
+    for mon, day, events, raw in days:
         chunks.append(f"{mon} {day}")
         for ev in events:
             people = f"  [{', '.join(ev['people'])}]" if ev["people"] else ""
