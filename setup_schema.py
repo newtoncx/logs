@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS event_people (
 def create_schema(db_path="logs.db"):
     conn = sqlite3.connect(db_path)
     try:
+        conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA)
     finally:
         conn.close()
