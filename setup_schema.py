@@ -11,7 +11,8 @@ CREATE TABLE events (
     day_id    INTEGER NOT NULL REFERENCES days(id),
     seq       INTEGER NOT NULL,
     text      TEXT NOT NULL,
-    category  TEXT
+    category  TEXT,
+    UNIQUE (day_id, seq)
 );
 CREATE TABLE people (
     id   INTEGER PRIMARY KEY,
