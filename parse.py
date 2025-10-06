@@ -46,13 +46,14 @@ def parse_file(path):
         if not m:
             i += 1
             continue
+        raw = lines[i]
         mon, day, rest = m.group(2).lower(), int(m.group(3)), (m.group(4) or "").strip()
         i += 1
         if rest:
             events = [parse_event(e.strip()) for e in rest.split(",") if e.strip()]
         else:
             events = []
-        days.append((mon, day, events, lines[i]))
+        days.append((mon, day, events, raw))
     return days
 
 
@@ -69,8 +70,10 @@ def format_days(days):
 
 def main():
     path = sys.argv[1]
-    text = format_days(parse_file(path))
-    sys.stdout.write(text if text.endswith("\n") else text + "\n")
+    days = parse_file(path)
+    n_events = sum(len(events) for _mon, _day, events, _raw in days)
+    print(f"{len(days)} days")
+    print(f"{n_events} events")
 
 
 if __name__ == "__main__":
