@@ -21,40 +21,34 @@ def _is_skip(line):
     return (not s) or s in ("(→)", "→") or set(s) <= {"_"}
 
 
-def logical_lines(raw_lines):
-    """Join wrapped continuations; drop blanks, rules, and (→) markers."""
-    out = []
-    for line in raw_lines:
+def parse_file(path):
+    """Return (days, failures). Each day is one line; anything else is a failure."""
+    days = []
+    failures = []
+    with open(path, encoding="utf-8-sig") as f:
+        physical = f.read().splitlines()
+
+    for lineno, line in enumerate(physical, 1):
         if _is_skip(line):
             continue
         s = line.strip()
-        if DAY_RE.match(s) or s.startswith("-") or not out:
-            out.append(s)
-        else:
-            out[-1] = out[-1].rstrip() + " " + s
-    return out
-
-
-def parse_file(path):
-    with open(path, encoding="utf-8-sig") as f:
-        lines = logical_lines(f.read().splitlines())
-
-    days = []
-    i = 0
-    while i < len(lines):
-        m = DAY_RE.match(lines[i])
+        m = DAY_RE.match(s)
         if not m:
-            i += 1
+            failures.append(f"{path}:{lineno}: {s}")
             continue
-        raw = lines[i]
-        mon, day, rest = m.group(2).lower(), int(m.group(3)), (m.group(4) or "").strip()
-        i += 1
-        if rest:
-            events = [parse_event(e.strip()) for e in rest.split(",") if e.strip()]
-        else:
-            events = []
-        days.append((mon, day, events, raw))
-    return days
+        rest = (m.group(4) or "").strip()
+        events = [parse_event(e.strip()) for e in rest.split(",") if e.strip()] if rest else []
+        days.append((m.group(2).lower(), int(m.group(3)), events, s))
+    return days, failures
+
+
+def format_parse_report(n_days, n_events, failures, verb="parsed"):
+    n_fail = len(failures)
+    msg = f"{verb} {n_days:,} days, {n_events:,} events, {n_fail:,} lines couldn't be parsed"
+    if n_fail:
+        msg += ", here they are."
+        return msg + "\n" + "\n".join(failures) + "\n"
+    return msg + "\n"
 
 
 def format_days(days):
@@ -70,10 +64,9 @@ def format_days(days):
 
 def main():
     path = sys.argv[1]
-    days = parse_file(path)
+    days, failures = parse_file(path)
     n_events = sum(len(events) for _mon, _day, events, _raw in days)
-    print(f"{len(days)} days")
-    print(f"{n_events} events")
+    sys.stdout.write(format_parse_report(len(days), n_events, failures))
 
 
 if __name__ == "__main__":

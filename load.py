@@ -1,9 +1,10 @@
 import glob
 import os
 import sqlite3
+import sys
 from datetime import date
 
-from parse import parse_file
+from parse import format_parse_report, parse_file
 from setup_schema import create_schema
 
 DB_PATH = "logs.db"
@@ -54,20 +55,32 @@ def load(db_path=DB_PATH, directory="."):
     try:
         conn.execute("PRAGMA foreign_keys = ON")
         people = {}
+        n_days = 0
+        n_events = 0
+        failures = []
         for path in year_files(directory):
             year = int(os.path.splitext(os.path.basename(path))[0])
-            for month, day, events, raw in parse_file(path):
+            days, file_failures = parse_file(path)
+            failures.extend(file_failures)
+            for month, day, events, raw in days:
+                try:
+                    when = iso_date(year, month, day)
+                except ValueError:
+                    failures.append(f"{path}: {raw} (invalid date)")
+                    continue
                 cur = conn.execute(
                     "INSERT INTO days (date, raw) VALUES (?, ?)",
-                    (iso_date(year, month, day), raw),
+                    (when, raw),
                 )
                 day_id = cur.lastrowid
+                n_days += 1
                 for seq, event in enumerate(events):
                     cur = conn.execute(
                         "INSERT INTO events (day_id, seq, text) VALUES (?, ?, ?)",
                         (day_id, seq, event["text"]),
                     )
                     event_id = cur.lastrowid
+                    n_events += 1
                     for name in event["people"]:
                         person_id = get_or_create_person(conn, people, name)
                         conn.execute(
@@ -75,6 +88,7 @@ def load(db_path=DB_PATH, directory="."):
                             (event_id, person_id),
                         )
         conn.commit()
+        sys.stdout.write(format_parse_report(n_days, n_events, failures, verb="loaded"))
     finally:
         conn.close()
 
