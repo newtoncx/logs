@@ -1,5 +1,7 @@
+import os
 import re
 import sys
+from datetime import date
 
 DAY_RE = re.compile(
     r"^(mon|tues|weds|thurs|fri|sat|sun)\s+"
@@ -7,6 +9,34 @@ DAY_RE = re.compile(
     r"(\d+)(?:\s+(.*))?$",
     re.I,
 )
+
+MONTHS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+
+WEEKDAYS = ["mon", "tues", "weds", "thurs", "fri", "sat", "sun"]
+
+
+def calendar_date(year, month, day):
+    return date(year, MONTHS[month], day)
+
+
+def _year_from_path(path):
+    stem = os.path.splitext(os.path.basename(path))[0]
+    if stem.isdigit() and len(stem) == 4:
+        return int(stem)
+    return None
 
 
 def parse_event(e):
@@ -22,9 +52,11 @@ def _is_skip(line):
 
 
 def parse_file(path):
-    """Return (days, failures). Each day is one line; anything else is a failure."""
+    """Return (days, line_failures, weekday_errors). Each day is one line."""
     days = []
-    failures = []
+    line_failures = []
+    weekday_errors = []
+    year = _year_from_path(path)
     with open(path, encoding="utf-8-sig") as f:
         physical = f.read().splitlines()
 
@@ -34,21 +66,39 @@ def parse_file(path):
         s = line.strip()
         m = DAY_RE.match(s)
         if not m:
-            failures.append(f"{path}:{lineno}: {s}")
+            line_failures.append(f"{path}:{lineno}: {s}")
             continue
+        weekday, mon, day = m.group(1).lower(), m.group(2).lower(), int(m.group(3))
         rest = (m.group(4) or "").strip()
         events = [parse_event(e.strip()) for e in rest.split(",") if e.strip()] if rest else []
-        days.append((m.group(2).lower(), int(m.group(3)), events, s))
-    return days, failures
+        if year is not None:
+            try:
+                when = calendar_date(year, mon, day)
+            except ValueError:
+                line_failures.append(f"{path}:{lineno}: {s} (invalid date)")
+                continue
+            expected = WEEKDAYS[when.weekday()]
+            if weekday != expected:
+                weekday_errors.append(
+                    f"{path}:{lineno}: {s} (wrote {weekday}, {when.isoformat()} is {expected})"
+                )
+        days.append((mon, day, events, s))
+    return days, line_failures, weekday_errors
 
 
-def format_parse_report(n_days, n_events, failures, verb="parsed"):
-    n_fail = len(failures)
+def format_parse_report(n_days, n_events, line_failures, verb="parsed", weekday_errors=None):
+    n_fail = len(line_failures)
     msg = f"{verb} {n_days:,} days, {n_events:,} events, {n_fail:,} lines couldn't be parsed"
+    chunks = [msg]
+    if weekday_errors is not None:
+        chunks[0] += f", {len(weekday_errors):,} weekday mismatches"
     if n_fail:
-        msg += ", here they are."
-        return msg + "\n" + "\n".join(failures) + "\n"
-    return msg + "\n"
+        chunks.append("couldn't parse:")
+        chunks.extend(line_failures)
+    if weekday_errors:
+        chunks.append("weekday mismatches:")
+        chunks.extend(weekday_errors)
+    return "\n".join(chunks) + "\n"
 
 
 def format_days(days):
@@ -64,9 +114,11 @@ def format_days(days):
 
 def main():
     path = sys.argv[1]
-    days, failures = parse_file(path)
+    days, line_failures, weekday_errors = parse_file(path)
     n_events = sum(len(events) for _mon, _day, events, _raw in days)
-    sys.stdout.write(format_parse_report(len(days), n_events, failures))
+    sys.stdout.write(
+        format_parse_report(len(days), n_events, line_failures, weekday_errors=weekday_errors)
+    )
 
 
 if __name__ == "__main__":

@@ -2,35 +2,15 @@ import glob
 import os
 import sqlite3
 import sys
-from datetime import date
 
-from parse import format_parse_report, parse_file
+from parse import calendar_date, format_parse_report, parse_file
 from setup_schema import create_schema
 
 DB_PATH = "logs.db"
 
-MONTHS = {
-    "jan": 1,
-    "feb": 2,
-    "mar": 3,
-    "apr": 4,
-    "may": 5,
-    "jun": 6,
-    "jul": 7,
-    "aug": 8,
-    "sep": 9,
-    "oct": 10,
-    "nov": 11,
-    "dec": 12,
-}
-
 
 def year_files(directory="."):
     return sorted(glob.glob(os.path.join(directory, "[0-9][0-9][0-9][0-9].txt")))
-
-
-def iso_date(year, month, day):
-    return date(year, MONTHS[month], day).isoformat()
 
 
 def get_or_create_person(conn, cache, name):
@@ -57,20 +37,18 @@ def load(db_path=DB_PATH, directory="."):
         people = {}
         n_days = 0
         n_events = 0
-        failures = []
+        line_failures = []
+        weekday_errors = []
         for path in year_files(directory):
             year = int(os.path.splitext(os.path.basename(path))[0])
-            days, file_failures = parse_file(path)
-            failures.extend(file_failures)
+            days, file_line_failures, file_weekday_errors = parse_file(path)
+            line_failures.extend(file_line_failures)
+            weekday_errors.extend(file_weekday_errors)
             for month, day, events, raw in days:
-                try:
-                    when = iso_date(year, month, day)
-                except ValueError:
-                    failures.append(f"{path}: {raw} (invalid date)")
-                    continue
+                when = calendar_date(year, month, day)
                 cur = conn.execute(
                     "INSERT INTO days (date, raw) VALUES (?, ?)",
-                    (when, raw),
+                    (when.isoformat(), raw),
                 )
                 day_id = cur.lastrowid
                 n_days += 1
@@ -88,7 +66,11 @@ def load(db_path=DB_PATH, directory="."):
                             (event_id, person_id),
                         )
         conn.commit()
-        sys.stdout.write(format_parse_report(n_days, n_events, failures, verb="loaded"))
+        sys.stdout.write(
+            format_parse_report(
+                n_days, n_events, line_failures, verb="loaded", weekday_errors=weekday_errors
+            )
+        )
     finally:
         conn.close()
 
